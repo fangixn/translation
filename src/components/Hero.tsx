@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Zap, Target, Award, Settings, Key, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, Zap, Target, Award, Settings, Key, Eye, EyeOff, LayoutGrid, Columns } from 'lucide-react';
 import { API_CONFIGS, AVAILABLE_MODELS, ANALYSIS_API_PRIORITY, PERFORMANCE_SETTINGS } from '../utils/apiConfig';
 import PerformanceTips from './PerformanceTips';
 import SaveConfigPanel from './SaveConfigPanel';
@@ -39,6 +39,7 @@ export default function Hero() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [savedKeysCount, setSavedKeysCount] = useState(0);
   const [showWelcome, setShowWelcome] = useState(true);
+  const [isVerticalLayout, setIsVerticalLayout] = useState(true); // 默认使用上下布局
 
   // 使用导入的配置
 
@@ -62,6 +63,7 @@ export default function Hero() {
         // 加载用户偏好
         const preferences = loadUserPreferences();
         setShowPerformanceTips(preferences.showPerformanceTips);
+        setIsVerticalLayout(preferences.isVerticalLayout !== false); // 默认为true
 
         // 更新保存的密钥数量
         setSavedKeysCount(getSavedApiKeysCount());
@@ -92,7 +94,8 @@ export default function Hero() {
       const preferences = loadUserPreferences();
       saveUserPreferences({
         ...preferences,
-        showPerformanceTips
+        showPerformanceTips,
+        isVerticalLayout
       });
       
       if (success) {
@@ -118,6 +121,7 @@ export default function Hero() {
       }));
       setSelectedModels(savedModels);
       setShowPerformanceTips(preferences.showPerformanceTips);
+      setIsVerticalLayout(preferences.isVerticalLayout !== false);
       setHasUnsavedChanges(false);
     } catch (error) {
       console.error('加载配置失败:', error);
@@ -136,22 +140,27 @@ export default function Hero() {
     });
     setSelectedModels(['openai', 'deepseek', 'gemini']);
     setShowPerformanceTips(false);
+    setIsVerticalLayout(true);
     setHasUnsavedChanges(false);
     setSavedKeysCount(0);
   };
 
-  // AI综合分析功能
+  // AI综合分析功能（增强版）
   const callJudge = async (originalPrompt: string, translationResults: any[]) => {
+    console.log('🔍 开始AI综合分析...');
+    
     // 优先使用可用的API密钥，不只依赖OpenAI
     let judgeApiKey = '';
     let judgeConfig: any = null;
+    let selectedApi = '';
     
-         // 按优先级尝试不同的API
-     const preferredApis = ANALYSIS_API_PRIORITY;
+    // 按优先级尝试不同的API
+    const preferredApis = ANALYSIS_API_PRIORITY;
     for (const apiName of preferredApis) {
       if (apiKeys[apiName as keyof typeof apiKeys]) {
         judgeApiKey = apiKeys[apiName as keyof typeof apiKeys];
         judgeConfig = API_CONFIGS[apiName as keyof typeof API_CONFIGS];
+        selectedApi = apiName;
         break;
       }
     }
@@ -160,33 +169,38 @@ export default function Hero() {
       throw new Error('没有可用的API密钥进行综合分析');
     }
 
+    console.log(`📡 使用 ${selectedApi} API 进行分析`);
+
     let comparisonText = `原始英文文本:\n"${originalPrompt}"\n\n`;
     comparisonText += "以下是多个AI模型的中文翻译结果:\n\n";
     translationResults.forEach((t, index) => {
       comparisonText += `${index + 1}. ${t.name}:\n"${t.translation}"\n\n`;
     });
 
-    const judgePrompt = `您是一位专业的翻译评审专家。请对以下英文文本的多个中文翻译进行分析比较：
+    const judgePrompt = `作为翻译评审专家，请简要分析以下翻译：
 
 ${comparisonText}
 
-请提供详细的分析，包括：
-1. 总体评价：哪个翻译最好，原因是什么
-2. 逐一分析：每个翻译的优缺点
-3. 具体建议：针对用户的最终推荐
+请用中文简洁回答：
+1. 最佳翻译：哪个最好及原因
+2. 主要差异：各翻译的优缺点
+3. 推荐建议：给用户的建议
 
-请用中文回答，分析要客观、专业、有建设性。`;
+限制在300字内。`;
 
     try {
-             // 添加超时控制和重试机制
-       const controller = new AbortController();
-       const timeoutId = setTimeout(() => controller.abort(), PERFORMANCE_SETTINGS.ANALYSIS_TIMEOUT);
+      // 添加超时控制和重试机制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), PERFORMANCE_SETTINGS.ANALYSIS_TIMEOUT);
 
       const url = 'getApiUrl' in judgeConfig && judgeConfig.getApiUrl ? 
         judgeConfig.getApiUrl(judgeApiKey) : judgeConfig.apiUrl;
       
       const headers = judgeConfig.buildHeaders(judgeApiKey);
       const body = judgeConfig.buildBody(judgePrompt);
+
+      console.log(`🚀 发送分析请求到: ${url.substring(0, 50)}...`);
+      console.log(`📝 Prompt长度: ${judgePrompt.length} 字符`);
 
       const response = await fetch(url, {
         method: 'POST',
@@ -197,14 +211,19 @@ ${comparisonText}
 
       clearTimeout(timeoutId);
 
+      console.log(`📬 收到响应: ${response.status}`);
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Analysis API Error:', response.status, errorText);
+        console.error('❌ Analysis API Error:', response.status, errorText);
         throw new Error(`分析请求失败: ${response.status} - ${errorText.substring(0, 200)}`);
       }
 
       const data = await response.json();
+      console.log('📦 API响应数据:', data);
+      
       const result = judgeConfig.parseResponse(data);
+      console.log(`✅ 解析结果长度: ${result?.length || 0} 字符`);
       
       if (!result || result.trim() === '') {
         throw new Error('API返回的分析结果为空');
@@ -212,15 +231,21 @@ ${comparisonText}
 
       return result;
     } catch (error) {
-      console.error('Judge Error Details:', error);
+      console.error('❌ Judge Error Details:', error);
       
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          throw new Error('分析请求超时，请稍后重试');
+          throw new Error(`分析请求超时（${PERFORMANCE_SETTINGS.ANALYSIS_TIMEOUT/1000}秒），请稍后重试`);
         } else if (error.message.includes('fetch')) {
           throw new Error('网络连接错误，请检查网络设置');
+        } else if (error.message.includes('401') || error.message.includes('403')) {
+          throw new Error(`API密钥无效或权限不足（${selectedApi}）`);
+        } else if (error.message.includes('429')) {
+          throw new Error(`API请求频率过高（${selectedApi}），请稍后重试`);
+        } else if (error.message.includes('500') || error.message.includes('502') || error.message.includes('503')) {
+          throw new Error(`${selectedApi} 服务器暂时不可用，请换个API或稍后重试`);
         } else {
-          throw new Error(`分析失败: ${error.message}`);
+          throw new Error(`分析失败（${selectedApi}）: ${error.message}`);
         }
       } else {
         throw new Error('分析过程中发生未知错误');
@@ -493,6 +518,38 @@ ${comparisonText}
                   </div>
                 </div>
 
+                {/* 页面布局选择 */}
+                <div className="mb-6">
+                  <h5 className="text-sm font-medium text-gray-700 mb-3">页面布局</h5>
+                  <div className="flex space-x-4">
+                    <button
+                      onClick={() => setIsVerticalLayout(true)}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-all ${
+                        isVerticalLayout 
+                          ? 'bg-blue-50 border-blue-300 text-blue-700' 
+                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                      <span className="text-sm">上下布局</span>
+                    </button>
+                    <button
+                      onClick={() => setIsVerticalLayout(false)}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-all ${
+                        !isVerticalLayout 
+                          ? 'bg-blue-50 border-blue-300 text-blue-700' 
+                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Columns className="h-4 w-4" />
+                      <span className="text-sm">左右布局</span>
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    上下布局：适合长文本翻译，充分利用屏幕宽度 | 左右布局：适合短文本对比
+                  </p>
+                </div>
+
                 {/* API密钥配置 */}
                 <div>
                   <h5 className="text-sm font-medium text-gray-700 mb-3">API密钥配置</h5>
@@ -548,19 +605,23 @@ ${comparisonText}
                   onClear={handleClearConfig}
                   hasUnsavedChanges={hasUnsavedChanges}
                   savedKeysCount={savedKeysCount}
+                  apiKeys={apiKeys}
                 />
               </div>
             )}
 
-            <div className="grid md:grid-cols-2 gap-8">
-              <div>
+            <div className={`${isVerticalLayout ? 'space-y-8' : 'grid md:grid-cols-2 gap-8'}`}>
+              {/* 输入区域 */}
+              <div className={isVerticalLayout ? 'w-full' : ''}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   输入英文内容
                 </label>
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  className="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className={`w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${
+                    isVerticalLayout ? 'h-24' : 'h-32'
+                  }`}
                   placeholder="请输入您要翻译的英文内容..."
                 />
                 <div className="mt-2 flex justify-between items-center">
@@ -580,7 +641,9 @@ ${comparisonText}
                 <button
                   onClick={handleTranslate}
                   disabled={!inputText.trim() || isTranslating || selectedModels.length === 0}
-                  className="mt-4 w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-2"
+                  className={`mt-4 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center space-x-2 ${
+                    isVerticalLayout ? 'w-auto' : 'w-full'
+                  }`}
                 >
                   {isTranslating ? (
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -593,11 +656,12 @@ ${comparisonText}
                 </button>
               </div>
 
-              <div>
+              {/* 结果区域 */}
+              <div className={isVerticalLayout ? 'w-full' : ''}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   AI模型翻译结果
                 </label>
-                <div className="space-y-4">
+                <div className={`space-y-4 ${isVerticalLayout ? 'grid md:grid-cols-2 gap-4' : ''}`}>
                   {translations.map((item: any, index) => (
                     <div key={index} className={`border rounded-lg p-4 ${
                       item.isAnalysis ? 

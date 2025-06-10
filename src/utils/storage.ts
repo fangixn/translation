@@ -17,6 +17,7 @@ export interface UserPreferences {
   showPerformanceTips: boolean;
   autoSaveEnabled: boolean;
   lastSaveTime?: string;
+  isVerticalLayout?: boolean;
 }
 
 // 保存API密钥到本地存储
@@ -99,7 +100,8 @@ export const loadUserPreferences = (): UserPreferences => {
   }
   return {
     showPerformanceTips: false,
-    autoSaveEnabled: true
+    autoSaveEnabled: true,
+    isVerticalLayout: true
   };
 };
 

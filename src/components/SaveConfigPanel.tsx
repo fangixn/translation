@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Save, Download, Trash2, Clock, Shield, AlertTriangle } from 'lucide-react';
+import { Save, Download, Trash2, Clock, Shield, AlertTriangle, Stethoscope } from 'lucide-react';
 import { getSaveTime, getSavedApiKeysCount, hasSavedData, clearAllSavedData } from '../utils/storage';
+import ApiDiagnostics from './ApiDiagnostics';
 
 interface SaveConfigPanelProps {
   onSave: () => void;
@@ -8,6 +9,7 @@ interface SaveConfigPanelProps {
   onClear: () => void;
   hasUnsavedChanges: boolean;
   savedKeysCount: number;
+  apiKeys: Record<string, string>;
 }
 
 export default function SaveConfigPanel({ 
@@ -15,10 +17,12 @@ export default function SaveConfigPanel({
   onLoad, 
   onClear, 
   hasUnsavedChanges,
-  savedKeysCount 
+  savedKeysCount,
+  apiKeys 
 }: SaveConfigPanelProps) {
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   
   const saveTime = getSaveTime();
   const hasSaved = hasSavedData();
@@ -82,7 +86,7 @@ export default function SaveConfigPanel({
       </div>
 
       {/* 操作按钮 */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <button
           onClick={handleSave}
           className={`flex items-center justify-center px-3 py-2 text-sm rounded transition-all ${
@@ -112,6 +116,14 @@ export default function SaveConfigPanel({
         >
           <Trash2 className="h-3 w-3 mr-1" />
           清除配置
+        </button>
+
+        <button
+          onClick={() => setShowDiagnostics(true)}
+          className="flex items-center justify-center px-3 py-2 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-all"
+        >
+          <Stethoscope className="h-3 w-3 mr-1" />
+          API诊断
         </button>
       </div>
 
@@ -156,6 +168,14 @@ export default function SaveConfigPanel({
           </div>
         </div>
       </div>
+
+      {/* API诊断工具 */}
+      {showDiagnostics && (
+        <ApiDiagnostics
+          apiKeys={apiKeys}
+          onClose={() => setShowDiagnostics(false)}
+        />
+      )}
     </div>
   );
 } 

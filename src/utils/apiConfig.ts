@@ -95,7 +95,7 @@ export const PERFORMANCE_SETTINGS = {
   DEFAULT_TIMEOUT: 30000,
   
   // 分析超时时间（毫秒）
-  ANALYSIS_TIMEOUT: 45000,
+  ANALYSIS_TIMEOUT: 60000,
   
   // 重试次数
   MAX_RETRIES: 2,
