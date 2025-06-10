@@ -4,22 +4,22 @@ import { Star, Quote } from 'lucide-react';
 export default function Testimonials() {
   const testimonials = [
     {
-      name: '李教授',
-      role: '北京大学英语系',
+      name: '李女士',
+      role: '某大学英语系教授',
       content: '作为一名翻译研究者，我对译言对比的多模型对比功能印象深刻。它不仅提供了多种翻译选择，还能分析各自的优劣，这对我的学术研究极有帮助。',
       rating: 5,
       avatar: 'https://images.pexels.com/photos/5212317/pexels-photo-5212317.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop'
     },
     {
-      name: '王经理',
-      role: '跨国贸易公司',
+      name: '王先生',
+      role: '某跨国贸易公司经理',
       content: '在商务翻译中，准确性至关重要。译言对比让我能够对比多个AI的翻译结果，选择最适合商务场景的表达方式，大大提高了工作效率。',
       rating: 5,
       avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop'
     },
     {
-      name: '张研究员',
-      role: '中科院计算机所',
+      name: '张先生',
+      role: '某软件公司工程师',
       content: '技术文档的翻译往往涉及专业术语，译言对比的专业分析功能能够准确识别最佳翻译，为我们的国际合作项目提供了强有力的支持。',
       rating: 5,
       avatar: 'https://images.pexels.com/photos/3785077/pexels-photo-3785077.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&fit=crop'

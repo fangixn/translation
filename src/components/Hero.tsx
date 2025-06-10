@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowRight, Zap, Target, Award, Settings, Key, Eye, EyeOff } from 'lucide-react';
 import { API_CONFIGS, AVAILABLE_MODELS, ANALYSIS_API_PRIORITY, PERFORMANCE_SETTINGS } from '../utils/apiConfig';
 import PerformanceTips from './PerformanceTips';
+import SaveConfigPanel from './SaveConfigPanel';
+import WelcomeMessage from './WelcomeMessage';
+import { 
+  saveApiKeys, 
+  loadApiKeys, 
+  saveSelectedModels, 
+  loadSelectedModels, 
+  saveUserPreferences, 
+  loadUserPreferences,
+  getSavedApiKeysCount,
+  type ApiKeys 
+} from '../utils/storage';
 
 export default function Hero() {
   const [inputText, setInputText] = useState('');
@@ -24,8 +36,109 @@ export default function Hero() {
   });
   const [translations, setTranslations] = useState([]);
   const [showPerformanceTips, setShowPerformanceTips] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [savedKeysCount, setSavedKeysCount] = useState(0);
+  const [showWelcome, setShowWelcome] = useState(true);
 
   // 使用导入的配置
+
+  // 初始化时加载保存的配置
+  useEffect(() => {
+    const loadSavedConfig = () => {
+      try {
+        // 加载API密钥
+        const savedKeys = loadApiKeys();
+        if (savedKeys && Object.keys(savedKeys).length > 0) {
+          setApiKeys(prev => ({
+            ...prev,
+            ...savedKeys
+          }));
+        }
+
+        // 加载选中的模型
+        const savedModels = loadSelectedModels();
+        setSelectedModels(savedModels);
+
+        // 加载用户偏好
+        const preferences = loadUserPreferences();
+        setShowPerformanceTips(preferences.showPerformanceTips);
+
+        // 更新保存的密钥数量
+        setSavedKeysCount(getSavedApiKeysCount());
+      } catch (error) {
+        console.error('加载保存的配置失败:', error);
+      }
+    };
+
+    loadSavedConfig();
+  }, []);
+
+  // 监听配置变化，标记为未保存
+  useEffect(() => {
+    const savedKeys = loadApiKeys();
+    const savedModels = loadSelectedModels();
+    
+    const currentKeysStr = JSON.stringify(apiKeys);
+    const savedKeysStr = JSON.stringify({ ...apiKeys, ...savedKeys });
+    const modelsChanged = JSON.stringify(selectedModels) !== JSON.stringify(savedModels);
+    
+    setHasUnsavedChanges(currentKeysStr !== savedKeysStr || modelsChanged);
+  }, [apiKeys, selectedModels]);
+
+  // 保存配置函数
+  const handleSaveConfig = () => {
+    try {
+      const success = saveApiKeys(apiKeys) && saveSelectedModels(selectedModels);
+      const preferences = loadUserPreferences();
+      saveUserPreferences({
+        ...preferences,
+        showPerformanceTips
+      });
+      
+      if (success) {
+        setHasUnsavedChanges(false);
+        setSavedKeysCount(getSavedApiKeysCount());
+      }
+    } catch (error) {
+      console.error('保存配置失败:', error);
+      alert('保存配置失败，请重试');
+    }
+  };
+
+  // 加载配置函数
+  const handleLoadConfig = () => {
+    try {
+      const savedKeys = loadApiKeys();
+      const savedModels = loadSelectedModels();
+      const preferences = loadUserPreferences();
+
+      setApiKeys(prev => ({
+        ...prev,
+        ...savedKeys
+      }));
+      setSelectedModels(savedModels);
+      setShowPerformanceTips(preferences.showPerformanceTips);
+      setHasUnsavedChanges(false);
+    } catch (error) {
+      console.error('加载配置失败:', error);
+      alert('加载配置失败，请重试');
+    }
+  };
+
+  // 清除配置函数
+  const handleClearConfig = () => {
+    setApiKeys({
+      openai: '',
+      deepseek: '',
+      gemini: '',
+      claude: '',
+      qwen: ''
+    });
+    setSelectedModels(['openai', 'deepseek', 'gemini']);
+    setShowPerformanceTips(false);
+    setHasUnsavedChanges(false);
+    setSavedKeysCount(0);
+  };
 
   // AI综合分析功能
   const callJudge = async (originalPrompt: string, translationResults: any[]) => {
@@ -332,6 +445,15 @@ ${comparisonText}
         </div>
 
         <div className="max-w-4xl mx-auto">
+          {/* 欢迎消息 */}
+          {showWelcome && (
+            <WelcomeMessage
+              hasSavedConfig={savedKeysCount > 0}
+              savedKeysCount={savedKeysCount}
+              onDismiss={() => setShowWelcome(false)}
+            />
+          )}
+          
           <div className="bg-white rounded-2xl shadow-xl p-8">
             {/* 设置按钮 */}
             <div className="flex justify-between items-center mb-6">
@@ -418,6 +540,15 @@ ${comparisonText}
                     </div>
                   </div>
                 </div>
+
+                {/* 保存配置面板 */}
+                <SaveConfigPanel
+                  onSave={handleSaveConfig}
+                  onLoad={handleLoadConfig}
+                  onClear={handleClearConfig}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  savedKeysCount={savedKeysCount}
+                />
               </div>
             )}
 
