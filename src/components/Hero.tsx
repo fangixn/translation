@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight, Zap, Target, Award, Settings, Key, Eye, EyeOff } from 'lucide-react';
+import { API_CONFIGS, AVAILABLE_MODELS, ANALYSIS_API_PRIORITY, PERFORMANCE_SETTINGS } from '../utils/apiConfig';
+import PerformanceTips from './PerformanceTips';
 
 export default function Hero() {
   const [inputText, setInputText] = useState('');
@@ -21,119 +23,95 @@ export default function Hero() {
     qwen: false
   });
   const [translations, setTranslations] = useState([]);
+  const [showPerformanceTips, setShowPerformanceTips] = useState(false);
 
-  // API配置对象 - 从test.tsx移植
-  const API_CONFIGS = {
-    openai: {
-      name: 'ChatGPT (GPT-4o-mini)',
-      apiUrl: 'https://api.openai.com/v1/chat/completions',
-      buildHeaders: (apiKey: string) => ({
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      }),
-      buildBody: (prompt: string) => ({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: `Translate the following English text to Chinese:\n\n${prompt}` }],
-      }),
-      parseResponse: (data: any) => data.choices[0]?.message?.content
-    },
-    gemini: {
-      name: 'Google Gemini 1.5 Flash',
-      apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
-      buildHeaders: () => ({ 'Content-Type': 'application/json' }),
-      buildBody: (prompt: string) => ({
-        contents: [{ parts: [{ text: `Translate the following English text to Chinese:\n\n${prompt}` }] }]
-      }),
-      getApiUrl: (apiKey: string) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      parseResponse: (data: any) => data.candidates[0]?.content?.parts[0]?.text
-    },
-    deepseek: {
-      name: 'DeepSeek v2',
-      apiUrl: 'https://api.deepseek.com/v1/chat/completions',
-      buildHeaders: (apiKey: string) => ({
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      }),
-      buildBody: (prompt: string) => ({
-        model: "deepseek-chat",
-        messages: [{ role: "user", content: `Translate the following English text to Chinese:\n\n${prompt}` }],
-      }),
-      parseResponse: (data: any) => data.choices[0]?.message?.content
-    },
-    claude: {
-      name: 'Anthropic Claude 3.5 Sonnet',
-      apiUrl: 'https://api.anthropic.com/v1/messages',
-      buildHeaders: (apiKey: string) => ({
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      }),
-      buildBody: (prompt: string) => ({
-        model: "claude-3-5-sonnet-20240620",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: `Translate the following English text to Chinese:\n\n${prompt}` }],
-      }),
-      parseResponse: (data: any) => data.content[0]?.text
-    },
-    qwen: {
-      name: 'Qwen-Max (通义千问)',
-      apiUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
-      buildHeaders: (apiKey: string) => ({
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      }),
-      buildBody: (prompt: string) => ({
-        model: "qwen-max",
-        input: {
-          prompt: `Translate the following English text to Chinese:\n\n${prompt}`
-        },
-        parameters: {}
-      }),
-      parseResponse: (data: any) => data.output?.text
-    }
-  };
-
-  const availableModels = [
-    { id: 'openai', name: 'ChatGPT (GPT-4o-mini)', description: 'OpenAI GPT-4o-mini' },
-    { id: 'gemini', name: 'Google Gemini 1.5 Flash', description: 'Google Gemini 1.5 Flash' },
-    { id: 'deepseek', name: 'DeepSeek v2', description: 'DeepSeek v2' },
-    { id: 'claude', name: 'Anthropic Claude 3.5 Sonnet', description: 'Anthropic Claude 3.5 Sonnet' },
-    { id: 'qwen', name: 'Qwen-Max (通义千问)', description: 'Qwen-Max (通义千问)' }
-  ];
+  // 使用导入的配置
 
   // AI综合分析功能
   const callJudge = async (originalPrompt: string, translationResults: any[]) => {
-    const judgeApiKey = apiKeys.openai;
-    if (!judgeApiKey) return;
+    // 优先使用可用的API密钥，不只依赖OpenAI
+    let judgeApiKey = '';
+    let judgeConfig: any = null;
+    
+         // 按优先级尝试不同的API
+     const preferredApis = ANALYSIS_API_PRIORITY;
+    for (const apiName of preferredApis) {
+      if (apiKeys[apiName as keyof typeof apiKeys]) {
+        judgeApiKey = apiKeys[apiName as keyof typeof apiKeys];
+        judgeConfig = API_CONFIGS[apiName as keyof typeof API_CONFIGS];
+        break;
+      }
+    }
 
-    const judgeConfig = API_CONFIGS.openai;
-    let comparisonText = `Original English Text:\n"${originalPrompt}"\n\n`;
-    comparisonText += "Here are several translations into Chinese:\n\n";
-    translationResults.forEach(t => {
-      comparisonText += `- ${t.name}:\n"${t.translation}"\n\n`;
+    if (!judgeApiKey || !judgeConfig) {
+      throw new Error('没有可用的API密钥进行综合分析');
+    }
+
+    let comparisonText = `原始英文文本:\n"${originalPrompt}"\n\n`;
+    comparisonText += "以下是多个AI模型的中文翻译结果:\n\n";
+    translationResults.forEach((t, index) => {
+      comparisonText += `${index + 1}. ${t.name}:\n"${t.translation}"\n\n`;
     });
 
-    const judgePrompt = `You are a professional translation reviewer. Your task is to analyze the following Chinese translations of an English source text. 
-1. Briefly state which translation is the best overall, considering accuracy, fluency, and nuance.
-2. Provide a point-by-point analysis explaining the strengths and weaknesses of each translation.
-3. Conclude with a final recommendation for the user.
-Please provide your analysis in Chinese.
+    const judgePrompt = `您是一位专业的翻译评审专家。请对以下英文文本的多个中文翻译进行分析比较：
 
-${comparisonText}`;
+${comparisonText}
+
+请提供详细的分析，包括：
+1. 总体评价：哪个翻译最好，原因是什么
+2. 逐一分析：每个翻译的优缺点
+3. 具体建议：针对用户的最终推荐
+
+请用中文回答，分析要客观、专业、有建设性。`;
 
     try {
-      const response = await fetch(judgeConfig.apiUrl, {
+             // 添加超时控制和重试机制
+       const controller = new AbortController();
+       const timeoutId = setTimeout(() => controller.abort(), PERFORMANCE_SETTINGS.ANALYSIS_TIMEOUT);
+
+      const url = 'getApiUrl' in judgeConfig && judgeConfig.getApiUrl ? 
+        judgeConfig.getApiUrl(judgeApiKey) : judgeConfig.apiUrl;
+      
+      const headers = judgeConfig.buildHeaders(judgeApiKey);
+      const body = judgeConfig.buildBody(judgePrompt);
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: judgeConfig.buildHeaders(judgeApiKey),
-        body: JSON.stringify(judgeConfig.buildBody(judgePrompt))
+        headers: headers,
+        body: JSON.stringify(body),
+        signal: controller.signal
       });
 
-      if (!response.ok) throw new Error(`分析请求失败: ${response.status}`);
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Analysis API Error:', response.status, errorText);
+        throw new Error(`分析请求失败: ${response.status} - ${errorText.substring(0, 200)}`);
+      }
+
       const data = await response.json();
-      return judgeConfig.parseResponse(data);
+      const result = judgeConfig.parseResponse(data);
+      
+      if (!result || result.trim() === '') {
+        throw new Error('API返回的分析结果为空');
+      }
+
+      return result;
     } catch (error) {
-      console.error('Judge Error:', error);
-      return `分析失败: ${error instanceof Error ? error.message : '未知错误'}`;
+      console.error('Judge Error Details:', error);
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          throw new Error('分析请求超时，请稍后重试');
+        } else if (error.message.includes('fetch')) {
+          throw new Error('网络连接错误，请检查网络设置');
+        } else {
+          throw new Error(`分析失败: ${error.message}`);
+        }
+      } else {
+        throw new Error('分析过程中发生未知错误');
+      }
     }
   };
 
@@ -152,11 +130,31 @@ ${comparisonText}`;
     setIsTranslating(true);
     setTranslations([]);
 
+    // 创建一个实时更新的翻译结果函数
+    const updateTranslation = (result: any) => {
+      setTranslations(prev => {
+        const newTranslations = [...prev];
+        const existingIndex = newTranslations.findIndex(t => t.id === result.id);
+        if (existingIndex >= 0) {
+          newTranslations[existingIndex] = result;
+        } else {
+          newTranslations.push(result);
+        }
+        return newTranslations;
+      });
+    };
+
+    // 并行执行所有翻译任务，但立即显示每个完成的结果
     const promises = selectedModels.map(async (modelId) => {
       const config = API_CONFIGS[modelId as keyof typeof API_CONFIGS];
       const apiKey = apiKeys[modelId as keyof typeof apiKeys];
       
       try {
+                 // 添加超时控制，避免单个API拖慢整体速度
+         const controller = new AbortController();
+         const apiTimeout = config.timeout || PERFORMANCE_SETTINGS.DEFAULT_TIMEOUT;
+         const timeoutId = setTimeout(() => controller.abort(), apiTimeout);
+
         const url = 'getApiUrl' in config && config.getApiUrl ? config.getApiUrl(apiKey) : config.apiUrl;
         const headers = config.buildHeaders(apiKey);
         const body = config.buildBody(inputText, apiKey);
@@ -164,8 +162,11 @@ ${comparisonText}`;
         const response = await fetch(url, {
           method: 'POST',
           headers: headers,
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
+          signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -176,42 +177,83 @@ ${comparisonText}`;
         const translation = config.parseResponse(data);
         if (!translation) throw new Error("API返回内容为空或格式不正确");
         
-        return { 
+        const result = { 
           id: modelId, 
           name: config.name, 
           status: 'fulfilled', 
           translation,
           quality: Math.floor(Math.random() * 10) + 90 // 模拟质量评分
         };
+
+        // 立即更新UI显示这个翻译结果
+        updateTranslation(result);
+        return result;
+        
       } catch (error) {
         console.error(`Error with ${config.name}:`, error);
-        return { 
+        const errorResult = { 
           id: modelId, 
           name: config.name, 
           status: 'rejected', 
           reason: error instanceof Error ? error.message : '未知错误'
         };
+        
+        // 也可以选择显示错误信息
+        // updateTranslation({ ...errorResult, translation: `翻译失败: ${errorResult.reason}`, isError: true });
+        return errorResult;
       }
     });
 
     try {
-      const results = await Promise.all(promises);
-      const successfulTranslations = results.filter(result => result.status === 'fulfilled');
-      const failedTranslations = results.filter(result => result.status === 'rejected');
-
-      setTranslations(successfulTranslations as any);
+      // 等待所有翻译完成
+      const results = await Promise.allSettled(promises.map(p => p.catch(e => e)));
+      const resolvedResults = await Promise.all(promises);
+      
+      const successfulTranslations = resolvedResults.filter(result => result.status === 'fulfilled');
+      const failedTranslations = resolvedResults.filter(result => result.status === 'rejected');
 
       // 如果有多个成功的翻译，进行AI分析
       if (successfulTranslations.length > 1) {
-        const analysis = await callJudge(inputText, successfulTranslations);
-        if (analysis) {
-          setTranslations(prev => [...prev, {
+        try {
+          // 显示分析进度
+          updateTranslation({
             id: 'analysis',
             name: 'AI 综合分析',
-            translation: analysis,
+            translation: '正在进行AI综合分析，请稍候...',
             quality: 100,
-            isAnalysis: true
-          } as any]);
+            isAnalysis: true,
+            isLoading: true
+          });
+
+          const analysis = await callJudge(inputText, successfulTranslations);
+          if (analysis) {
+            updateTranslation({
+              id: 'analysis',
+              name: 'AI 综合分析',
+              translation: analysis,
+              quality: 100,
+              isAnalysis: true
+            });
+          } else {
+            updateTranslation({
+              id: 'analysis',
+              name: 'AI 综合分析',
+              translation: '分析功能暂时不可用，请稍后再试',
+              quality: 100,
+              isAnalysis: true,
+              isError: true
+            });
+          }
+        } catch (analysisError) {
+          console.error('Analysis error:', analysisError);
+          updateTranslation({
+            id: 'analysis',
+            name: 'AI 综合分析',
+            translation: `分析失败: ${analysisError instanceof Error ? analysisError.message : '未知错误'}`,
+            quality: 100,
+            isAnalysis: true,
+            isError: true
+          });
         }
       }
 
@@ -312,7 +354,7 @@ ${comparisonText}`;
                 <div className="mb-6">
                   <h5 className="text-sm font-medium text-gray-700 mb-3">选择翻译模型</h5>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {availableModels.map((model) => (
+                    {AVAILABLE_MODELS.map((model) => (
                       <label key={model.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-white cursor-pointer">
                         <input
                           type="checkbox"
@@ -398,6 +440,12 @@ ${comparisonText}`;
                     {inputText.length} 字符
                   </span>
                 </div>
+                <PerformanceTips
+                  isTranslating={isTranslating}
+                  selectedModels={selectedModels}
+                  showTips={showPerformanceTips}
+                  onToggleTips={() => setShowPerformanceTips(!showPerformanceTips)}
+                />
                 <button
                   onClick={handleTranslate}
                   disabled={!inputText.trim() || isTranslating || selectedModels.length === 0}
@@ -420,19 +468,39 @@ ${comparisonText}`;
                 </label>
                 <div className="space-y-4">
                   {translations.map((item: any, index) => (
-                    <div key={index} className={`border rounded-lg p-4 ${item.isAnalysis ? 'bg-orange-50 border-orange-200' : 'border-gray-200'}`}>
+                    <div key={index} className={`border rounded-lg p-4 ${
+                      item.isAnalysis ? 
+                        (item.isError ? 'bg-red-50 border-red-200' : 'bg-orange-50 border-orange-200') : 
+                        (item.isError ? 'bg-red-50 border-red-200' : 'border-gray-200')
+                    }`}>
                       <div className="flex justify-between items-center mb-2">
-                        <span className="font-medium text-gray-900">{item.name}</span>
-                        {!item.isAnalysis && (
+                        <span className={`font-medium ${item.isError ? 'text-red-700' : 'text-gray-900'}`}>
+                          {item.name}
+                          {item.isLoading && (
+                            <span className="ml-2 text-sm text-blue-600">
+                              <div className="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                            </span>
+                          )}
+                        </span>
+                        {!item.isAnalysis && !item.isError && (
                           <div className="flex items-center space-x-2">
                             <div className={`w-2 h-2 rounded-full ${getQualityColor(item.quality)}`}></div>
                             <span className="text-sm text-gray-600">{item.quality}%</span>
                           </div>
                         )}
                       </div>
-                      <p className={`whitespace-pre-wrap ${item.isAnalysis ? 'text-sm text-gray-700' : 'text-gray-800'}`}>
+                      <p className={`whitespace-pre-wrap ${
+                        item.isAnalysis ? 
+                          (item.isError ? 'text-sm text-red-700' : 'text-sm text-gray-700') : 
+                          (item.isError ? 'text-red-700' : 'text-gray-800')
+                      }`}>
                         {item.translation}
                       </p>
+                      {item.isError && !item.isAnalysis && (
+                        <div className="mt-2 text-xs text-red-600">
+                          建议检查API密钥配置或网络连接
+                        </div>
+                      )}
                     </div>
                   ))}
 
